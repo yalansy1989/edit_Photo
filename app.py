@@ -1,146 +1,194 @@
-import io, time, base64, os
-import requests
-import streamlit as st
-from PIL import Image
-from streamlit_image_comparison import image_comparison
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>4K Enhancer</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+  <style>
+    :root{
+      --bg:#0b1025;
+      --panel:#161b35;
+      --header:#0f1430;
+      --muted:#a8b2d1;
+      --text:#ffffff;
+      --accent:#2d5bff;
+      --accent-2:#4d7aff;
+      --border:rgba(255,255,255,.06);
+      --shadow:0 18px 40px rgba(0,0,0,.35);
+      --radius:18px;
+      --container:1180px;
+      --grad:linear-gradient(135deg,#2d5bff 0%,#1a3cc7 100%);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:var(--bg);color:var(--text);
+      font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; line-height:1.6;
+    }
+    /* Header */
+    .site-header{
+      position:sticky;top:0;z-index:10;background:rgba(15,20,48,.95);
+      backdrop-filter:blur(8px); box-shadow:0 8px 24px rgba(0,0,0,.35);
+    }
+    .container{max-width:var(--container);margin:0 auto;padding:16px 24px}
+    .nav{
+      display:flex;align-items:center;justify-content:space-between;
+    }
+    .brand{font-weight:800;font-size:20px;letter-spacing:.2px}
+    .brand i{color:var(--accent);margin-right:8px}
 
-# ===== إعدادات من Secrets أو Env =====
-PROVIDER = (st.secrets.get("ENHANCER_PROVIDER", os.getenv("ENHANCER_PROVIDER", "hf")) or "hf").lower()
-HF_API_KEY = st.secrets.get("HF_API_KEY", os.getenv("HF_API_KEY"))
-HF_MODEL_ID = st.secrets.get("HF_MODEL_ID", os.getenv("HF_MODEL_ID", "nateraw/real-esrgan"))
-DEEPAI_API_KEY = st.secrets.get("DEEPAI_API_KEY", os.getenv("DEEPAI_API_KEY"))
+    /* Hero */
+    .hero{
+      text-align:center; padding:28px 24px 8px;
+      background:var(--header);
+      border-bottom:1px solid var(--border);
+      box-shadow:var(--shadow);
+    }
+    .hero h1{
+      margin:6px 0 2px; font-size:30px; font-weight:900;
+      background:var(--grad); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    }
+    .hero p{color:var(--muted);margin:0 0 14px}
+    .hero .btn{
+      display:inline-flex;align-items:center;gap:10px;
+      padding:12px 22px;border:0;border-radius:999px;
+      background:var(--grad); color:#fff; cursor:pointer; font-weight:700;
+      box-shadow:0 12px 30px rgba(45,91,255,.35);
+      transition:transform .15s ease, box-shadow .15s ease;
+    }
+    .hero .btn:hover{transform:translateY(-1px); box-shadow:0 16px 38px rgba(45,91,255,.45);}
 
-MAX_BYTES = 20 * 1024 * 1024  # 20MB
-TIMEOUT = 180  # seconds
+    /* Upload Card */
+    .card{
+      max-width:var(--container); margin:28px auto; padding:26px;
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:var(--radius); box-shadow:var(--shadow);
+    }
+    .dropzone{
+      position:relative; border:2px dashed var(--accent-2);
+      border-radius:16px; padding:68px 18px;
+      background:rgba(77,122,255,.06); text-align:center;
+      transition:.2s ease;
+    }
+    .dropzone:hover, .dropzone.dragover{
+      background:rgba(77,122,255,.12);
+      box-shadow:inset 0 0 0 2px rgba(77,122,255,.15);
+    }
+    .dropzone i{font-size:56px;color:var(--accent);display:block;margin-bottom:14px}
+    .dropzone .title{font-size:20px;font-weight:700;margin:0 0 6px}
+    .dropzone .hint{color:var(--muted);margin:0}
+    .hidden-input{display:none}
+    .file-pill{
+      margin-top:14px; display:inline-flex; align-items:center; gap:8px;
+      padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.06);
+      color:#e8ecff; font-size:13px; border:1px solid var(--border);
+    }
 
-st.set_page_config(page_title="4K AI Image Enhancer", page_icon="✨", layout="centered")
+    /* Footer */
+    footer{
+      margin-top:60px; background:#121735; border-top:1px solid var(--border);
+      padding:38px 0;
+    }
+    .links{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:14px}
+    .links a{color:var(--muted);text-decoration:none}
+    .links a:hover{color:var(--accent)}
+    .social{margin:20px 0; display:flex; gap:14px; justify-content:center}
+    .social a{
+      width:42px;height:42px;border-radius:50%; display:grid;place-items:center;
+      background:rgba(255,255,255,.06); color:var(--muted); text-decoration:none;
+      transition:.2s ease; border:1px solid var(--border)
+    }
+    .social a:hover{background:var(--accent);color:#fff; transform:translateY(-2px)}
+    .copy{color:var(--muted);text-align:center;font-size:13px;margin-top:12px}
 
-st.title("4K AI Image Enhancer (Streamlit)")
-st.caption("Upload → One-click enhance → Compare → Download PNG")
+    @media (max-width:720px){
+      .hero h1{font-size:22px}
+      .dropzone{padding:56px 14px}
+    }
+  </style>
+</head>
+<body>
 
-uploaded = st.file_uploader("Upload an image (JPG/PNG/WebP)", type=["jpg", "jpeg", "png", "webp"])
-enhance_btn = st.button("Enhance Quality Now", disabled=uploaded is None)
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container nav">
+      <div class="brand"><i class="fa-solid fa-bolt"></i>4K Enhancer</div>
+    </div>
+    <div class="hero">
+      <h1>Enhance Your Images to 4K Quality</h1>
+      <p>Upgrade your photos with crystal-clear 4K resolution</p>
+      <button id="trigger-upload" class="btn"><i class="fa-solid fa-upload"></i> Upload Image</button>
+    </div>
+  </header>
 
-def to_png_bytes(pil_img: Image.Image) -> bytes:
-    buf = io.BytesIO()
-    pil_img.save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
+  <!-- Upload card -->
+  <main class="card">
+    <div id="dropzone" class="dropzone" role="button" aria-label="Upload image area" tabindex="0">
+      <i class="fa-solid fa-cloud-arrow-up"></i>
+      <p class="title">Drag & Drop your image here</p>
+      <p class="hint">or click to browse files</p>
+      <input id="file-input" class="hidden-input" type="file" accept="image/*" />
+      <div id="file-pill" class="file-pill" style="display:none">
+        <i class="fa-regular fa-file-image"></i><span id="file-name"></span>
+      </div>
+    </div>
+  </main>
 
-def ensure_4k(pil_img: Image.Image) -> Image.Image:
-    # اختياري: ضمان الوصول لأبعاد 4K كحدّ أقصى مع الحفاظ على النسبة (Upscale فقط إن كانت أقل)
-    W4K, H4K = 3840, 2160
-    w, h = pil_img.size
-    if w >= W4K or h >= H4K:
-        return pil_img
-    ratio = w / h
-    if ratio >= 16/9:
-        new_w = W4K
-        new_h = round(new_w / ratio)
-    else:
-        new_h = H4K
-        new_w = round(new_h * ratio)
-    return pil_img.resize((new_w, new_h), Image.LANCZOS)
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <nav class="links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Contact Us</a>
+        <a href="#">API Documentation</a>
+        <a href="#">About</a>
+      </nav>
+      <div class="social">
+        <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+        <a href="#" aria-label="Twitter / X"><i class="fab fa-twitter"></i></a>
+        <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+        <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+        <a href="#" aria-label="GitHub"><i class="fab fa-github"></i></a>
+      </div>
+      <div class="copy">© 2023 4K Enhancer. All rights reserved.</div>
+    </div>
+  </footer>
 
-def hf_enhance(img_bytes: bytes) -> bytes:
-    if not HF_API_KEY:
-        raise RuntimeError("HF_API_KEY missing")
-    url = f"https://api-inference.huggingface.co/models/{HF_MODEL_ID}"
-    headers = {"Authorization": f"Bearer {HF_API_KEY}", "Content-Type": "application/octet-stream"}
-    # بعض نماذج HF تحتاج تسخين: نكرّر الاستدعاء حتى يرجع بايتات صورة
-    start = time.time()
-    delay = 2.0
-    while True:
-        r = requests.post(url, data=img_bytes, headers=headers, timeout=TIMEOUT)
-        ct = r.headers.get("content-type", "")
-        if r.status_code == 200 and ct.startswith("image/"):
-            return r.content
-        # حاول قراءة رسالة الخطأ/التحميل
-        try:
-            msg = r.json()
-        except Exception:
-            msg = {"error": r.text[:200]}
-        if time.time() - start > TIMEOUT:
-            raise RuntimeError(f"HF timeout: {msg}")
-        time.sleep(delay)
-        delay = min(delay * 1.5, 6.0)
+  <script>
+    const dz = document.getElementById('dropzone');
+    const input = document.getElementById('file-input');
+    const pill = document.getElementById('file-pill');
+    const fname = document.getElementById('file-name');
+    const trigger = document.getElementById('trigger-upload');
 
-def deepai_enhance(img_bytes: bytes) -> bytes:
-    if not DEEPAI_API_KEY:
-        raise RuntimeError("DEEPAI_API_KEY missing")
-    files = {"image": ("input.png", img_bytes)}
-    headers = {"Api-Key": DEEPAI_API_KEY}
-    r = requests.post("https://api.deepai.org/api/torch-srgan", files=files, headers=headers, timeout=TIMEOUT)
-    data = r.json()
-    if "output_url" not in data:
-        raise RuntimeError(f"DeepAI error: {data}")
-    img_r = requests.get(data["output_url"], timeout=TIMEOUT)
-    return img_r.content
+    // open dialog from header button
+    trigger.addEventListener('click', () => input.click());
 
-def enhance(img_bytes: bytes) -> bytes:
-    # 1) HF أولاً (إن مُفعّل) مع سقوط تلقائي على DeepAI
-    if PROVIDER == "hf" and HF_API_KEY:
-        try:
-            return hf_enhance(img_bytes)
-        except Exception as e:
-            if DEEPAI_API_KEY:
-                return deepai_enhance(img_bytes)
-            raise e
-    # 2) DeepAI مباشرة
-    if DEEPAI_API_KEY:
-        return deepai_enhance(img_bytes)
-    # لا مزوّد مفعّل
-    raise RuntimeError("No enhancer provider configured. Set HF_API_KEY or DEEPAI_API_KEY.")
+    // click / keyboard on zone
+    dz.addEventListener('click', () => input.click());
+    dz.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); input.click(); } });
 
-if uploaded:
-    # عرض الأصل
-    try:
-        original = Image.open(uploaded).convert("RGB")
-    except Exception:
-        st.error("Invalid image.")
-        st.stop()
-    if uploaded.size and uploaded.size > MAX_BYTES:
-        st.warning("Image is large; consider ≤ 20MB.")
-    st.image(original, caption=f"Original ({original.width}×{original.height})", use_column_width=True)
+    // drag & drop
+    ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, (e)=>{ e.preventDefault(); dz.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, (e)=>{ e.preventDefault(); dz.classList.remove('dragover'); }));
+    dz.addEventListener('drop', (e)=>{
+      const file = e.dataTransfer.files?.[0];
+      if(file) handleFile(file);
+    });
 
-if enhance_btn and uploaded:
-    with st.status("Processing…", expanded=True) as status:
-        st.write("Analyzing / Upscaling / Denoising…")
-        # اقرأ bytes
-        uploaded.seek(0)
-        img_bytes = uploaded.read()
-        # نفّذ التحسين
-        try:
-            enhanced_bytes = enhance(img_bytes)
-            # افتح كصورة ثم حوّل إلى PNG وضَمِن 4K (اختياري)
-            enhanced_img = Image.open(io.BytesIO(enhanced_bytes)).convert("RGB")
-            enhanced_img = ensure_4k(enhanced_img)
-            png_bytes = to_png_bytes(enhanced_img)
-            status.update(label="Done", state="complete")
+    input.addEventListener('change', (e)=>{
+      const file = e.target.files?.[0];
+      if(file) handleFile(file);
+    });
 
-            # مقارنة قبل/بعد
-            st.subheader("Before / After")
-            try:
-                image_comparison(
-                    img1=original,
-                    img2=enhanced_img,
-                    label1=f"Original {original.width}×{original.height}",
-                    label2=f"Enhanced {enhanced_img.width}×{enhanced_img.height}",
-                    width=700
-                )
-            except Exception:
-                # احتياط: أعرض عمودين بدل السلايدر إذا الباكيج غير متاح
-                c1, c2 = st.columns(2)
-                with c1: st.image(original, caption="Original", use_column_width=True)
-                with c2: st.image(enhanced_img, caption="Enhanced", use_column_width=True)
-
-            st.download_button(
-                "Download PNG",
-                data=png_bytes,
-                file_name="image-enhanced-4k.png",
-                mime="image/png",
-                type="primary",
-                use_container_width=True
-            )
-        except Exception as e:
-            st.error(f"Enhancement failed: {e}")
-            st.stop()
+    function handleFile(file){
+      if(!file.type.startsWith('image/')){ alert('Please choose an image'); return; }
+      fname.textContent = `${file.name} — ${(file.size/1024).toFixed(0)} KB`;
+      pill.style.display = 'inline-flex';
+      // هنا فقط واجهة؛ اربط الحدث بباك-إندك لاحقًا إذا رغبت
+    }
+  </script>
+</body>
+</html>
